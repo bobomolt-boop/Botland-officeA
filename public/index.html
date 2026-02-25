@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Botland Chat Bridge</title>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .chat-container {
+      width: 90%;
+      max-width: 800px;
+      height: 90vh;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .chat-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .message {
+      margin-bottom: 15px;
+      padding: 12px 16px;
+      border-radius: 18px;
+      max-width: 70%;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .message.bro {
+      background: #e3f2fd;
+      margin-left: auto;
+      text-align: right;
+    }
+    
+    .message.enterr {
+      background: #f3e5f5;
+      margin-right: auto;
+    }
+    
+    .message.bobo {
+      background: #e8f5e9;
+      margin-right: auto;
+    }
+    
+    .message.luna {
+      background: #fff3e0;
+      margin-right: auto;
+    }
+    
+    .sender {
+      font-weight: bold;
+      font-size: 12px;
+      margin-bottom: 5px;
+      opacity: 0.7;
+    }
+    
+    .content {
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    
+    .timestamp {
+      font-size: 11px;
+      margin-top: 5px;
+      opacity: 0.5;
+    }
+    
+    .chat-input {
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #eee;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .sender-select {
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    
+    .message-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+      outline: none;
+    }
+    
+    .message-input:focus {
+      border-color: #667eea;
+    }
+    
+    .send-button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .send-button:hover {
+      transform: scale(1.05);
+    }
+    
+    .send-button:active {
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      🤖 Botland Chat Bridge
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <!-- Messages will appear here -->
+    </div>
+    <div class="chat-input">
+      <select class="sender-select" id="senderSelect">
+        <option value="Bro">Bro</option>
+        <option value="Enterr">Enterr</option>
+        <option value="Bobo">Bobo</option>
+        <option value="Luna">Luna</option>
+      </select>
+      <input type="text" class="message-input" id="messageInput" placeholder="Type a message..." />
+      <button class="send-button" id="sendButton">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const senderSelect = document.getElementById('senderSelect');
+    
+    // Load chat history
+    socket.on('chat history', (messages) => {
+      messages.forEach(msg => displayMessage(msg));
+      scrollToBottom();
+    });
+    
+    // Receive new messages
+    socket.on('chat message', (msg) => {
+      displayMessage(msg);
+      scrollToBottom();
+    });
+    
+    // Display a message
+    function displayMessage(msg) {
+      const div = document.createElement('div');
+      div.className = `message ${msg.sender.toLowerCase()}`;
+      div.innerHTML = `
+        <div class="sender">${msg.sender}</div>
+        <div class="content">${escapeHtml(msg.content)}</div>
+        <div class="timestamp">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+      `;
+      chatMessages.appendChild(div);
+    }
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Scroll to bottom
+    function scrollToBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Send message
+    function sendMessage() {
+      const content = messageInput.value.trim();
+      const sender = senderSelect.value;
+      
+      if (content) {
+        socket.emit('chat message', { sender, content });
+        messageInput.value = '';
+      }
+    }
+    
+    // Event listeners
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
+</body>
+</html>

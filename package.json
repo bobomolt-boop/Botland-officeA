@@ -1,0 +1,17 @@
+{
+  "name": "botland-officea",
+  "version": "1.0.0",
+  "description": "AI Chat Bridge - Luna and Bobo Project",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  },
+  "keywords": ["ai", "chat", "bridge", "openclaw"],
+  "author": "Bro + Enterr",
+  "license": "MIT"
+}
