@@ -23,6 +23,9 @@ const API_KEYS = {
   'luna': process.env.LUNA_API_KEY || 'luna-key-change-me'
 };
 
+// Track typing users
+const typingUsers = new Map(); // socket.id -> { sender, timeout }
+
 // Load messages from file
 function loadMessages() {
   try {
@@ -82,8 +85,16 @@ app.post('/api/message', verifyApiKey, (req, res) => {
   
   saveMessage(message);
   io.emit('chat message', message);
+  io.emit('stop typing', { sender }); // Stop typing indicator when message sent
   console.log(`📨 Message from ${sender}: ${content.substring(0, 50)}...`);
   res.json({ success: true, message });
+});
+
+// POST /api/typing - Typing indicator (requires API key)
+app.post('/api/typing', verifyApiKey, (req, res) => {
+  const { sender, isTyping } = req.body;
+  io.emit('typing', { sender, isTyping });
+  res.json({ success: true });
 });
 
 // GET /api/messages - Get all messages (public for now)
@@ -114,7 +125,7 @@ io.on('connection', (socket) => {
   const messages = loadMessages();
   socket.emit('chat history', messages.slice(-100));
   
-  // Handle new messages from web UI (Bro only for now)
+  // Handle new messages from web UI
   socket.on('chat message', (data) => {
     const message = {
       id: Date.now(),
@@ -125,10 +136,45 @@ io.on('connection', (socket) => {
     
     saveMessage(message);
     io.emit('chat message', message);
+    
+    // Stop typing indicator
+    if (typingUsers.has(socket.id)) {
+      clearTimeout(typingUsers.get(socket.id).timeout);
+      typingUsers.delete(socket.id);
+    }
+    io.emit('stop typing', { sender: data.sender || 'Bro' });
+  });
+  
+  // Handle typing indicator from web UI
+  socket.on('typing', (data) => {
+    const sender = data.sender || 'Bro';
+    
+    // Clear existing timeout
+    if (typingUsers.has(socket.id)) {
+      clearTimeout(typingUsers.get(socket.id).timeout);
+    }
+    
+    // Broadcast typing to others
+    socket.broadcast.emit('typing', { sender });
+    
+    // Auto-stop after 3 seconds of no typing
+    const timeout = setTimeout(() => {
+      socket.broadcast.emit('stop typing', { sender });
+      typingUsers.delete(socket.id);
+    }, 3000);
+    
+    typingUsers.set(socket.id, { sender, timeout });
   });
   
   socket.on('disconnect', () => {
     console.log('👤 User disconnected:', socket.id);
+    // Clean up typing indicator
+    if (typingUsers.has(socket.id)) {
+      const { sender, timeout } = typingUsers.get(socket.id);
+      clearTimeout(timeout);
+      socket.broadcast.emit('stop typing', { sender });
+      typingUsers.delete(socket.id);
+    }
   });
 });
 

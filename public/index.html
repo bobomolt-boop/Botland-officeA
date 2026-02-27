@@ -108,6 +108,24 @@
       opacity: 0.5;
     }
     
+    /* Typing indicator styles */
+    .typing-indicator {
+      padding: 8px 16px;
+      font-size: 13px;
+      color: #666;
+      font-style: italic;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    
+    .typing-indicator.hidden {
+      display: none;
+    }
+    
     .chat-input {
       padding: 20px;
       background: white;
@@ -166,6 +184,9 @@
     <div class="chat-messages" id="chatMessages">
       <!-- Messages will appear here -->
     </div>
+    <div class="typing-indicator hidden" id="typingIndicator">
+      <span id="typingText">Someone is typing...</span>
+    </div>
     <div class="chat-input">
       <select class="sender-select" id="senderSelect">
         <option value="Bro">Bro</option>
@@ -184,6 +205,11 @@
     const messageInput = document.getElementById('messageInput');
     const sendButton = document.getElementById('sendButton');
     const senderSelect = document.getElementById('senderSelect');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const typingText = document.getElementById('typingText');
+    
+    let typingTimeout;
+    let isTyping = false;
     
     // Load chat history
     socket.on('chat history', (messages) => {
@@ -197,6 +223,15 @@
       scrollToBottom();
     });
     
+    // Typing indicator
+    socket.on('typing', (data) => {
+      showTyping(data.sender);
+    });
+    
+    socket.on('stop typing', (data) => {
+      hideTyping(data.sender);
+    });
+    
     // Display a message
     function displayMessage(msg) {
       const div = document.createElement('div');
@@ -207,6 +242,16 @@
         <div class="timestamp">${new Date(msg.timestamp).toLocaleTimeString()}</div>
       `;
       chatMessages.appendChild(div);
+    }
+    
+    // Typing indicator functions
+    function showTyping(sender) {
+      typingText.textContent = `${sender} 正在輸入中...`;
+      typingIndicator.classList.remove('hidden');
+    }
+    
+    function hideTyping(sender) {
+      typingIndicator.classList.add('hidden');
     }
     
     // Escape HTML to prevent XSS
@@ -229,8 +274,33 @@
       if (content) {
         socket.emit('chat message', { sender, content });
         messageInput.value = '';
+        
+        // Stop typing indicator
+        if (isTyping) {
+          isTyping = false;
+          socket.emit('stop typing', { sender });
+        }
       }
     }
+    
+    // Typing detection
+    messageInput.addEventListener('input', () => {
+      const sender = senderSelect.value;
+      
+      if (!isTyping && messageInput.value.trim()) {
+        isTyping = true;
+        socket.emit('typing', { sender });
+      }
+      
+      // Reset timeout
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        if (isTyping) {
+          isTyping = false;
+          socket.emit('stop typing', { sender });
+        }
+      }, 3000);
+    });
     
     // Event listeners
     sendButton.addEventListener('click', sendMessage);
