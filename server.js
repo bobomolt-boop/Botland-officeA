@@ -34,7 +34,7 @@ app.get('/api/messages', (req, res) => {
   res.json(messages);
 });
 
-// API: Send message (for bots)
+// API: Send message (for bots) - POST version
 app.post('/api/send-message', (req, res) => {
   const { from, text } = req.body;
   
@@ -63,6 +63,38 @@ app.post('/api/send-message', (req, res) => {
   }
   
   // Broadcast to all connected clients
+  io.emit('message', message);
+  
+  res.json({ success: true, message });
+});
+
+// API: Send message - SIMPLE GET version for Bobo (query params)
+app.get('/api/send', (req, res) => {
+  const { from, text } = req.query;
+  
+  if (!from || !text) {
+    return res.status(400).json({ error: 'Missing from or text query params' });
+  }
+  
+  const userKey = from.toLowerCase();
+  if (!users[userKey]) {
+    return res.status(400).json({ error: 'Invalid user' });
+  }
+  
+  const message = {
+    id: Date.now(),
+    from: userKey,
+    text: decodeURIComponent(text),
+    timestamp: new Date().toISOString(),
+    user: users[userKey]
+  };
+  
+  messages.push(message);
+  
+  if (messages.length > 100) {
+    messages = messages.slice(-100);
+  }
+  
   io.emit('message', message);
   
   res.json({ success: true, message });
