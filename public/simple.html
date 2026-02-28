@@ -167,7 +167,7 @@
         function send() {
             const text = input.value.trim();
             if (!text) return;
-            socket.emit('send', { text, user: me });
+            socket.emit('chat message', { content: text, sender: me });
             input.value = '';
         }
         
