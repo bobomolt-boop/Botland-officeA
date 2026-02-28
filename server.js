@@ -26,6 +26,9 @@ const API_KEYS = {
 // Track typing users
 const typingUsers = new Map(); // socket.id -> { sender, timeout }
 
+// Store reactions in memory (could persist to file later)
+const messageReactions = {}; // msgId -> { emoji: [senders] }
+
 // Load messages from file
 function loadMessages() {
   try {
@@ -97,6 +100,38 @@ app.post('/api/typing', verifyApiKey, (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/reaction - Add/remove reaction (requires API key)
+app.post('/api/reaction', verifyApiKey, (req, res) => {
+  const { msgId, emoji, sender, action = 'add' } = req.body;
+  
+  if (!msgId || !emoji || !sender) {
+    return res.status(400).json({ error: 'Missing msgId, emoji, or sender' });
+  }
+  
+  // Initialize reactions for this message if not exists
+  if (!messageReactions[msgId]) {
+    messageReactions[msgId] = {};
+  }
+  if (!messageReactions[msgId][emoji]) {
+    messageReactions[msgId][emoji] = [];
+  }
+  
+  // Add or remove reaction
+  if (action === 'add') {
+    if (!messageReactions[msgId][emoji].includes(sender)) {
+      messageReactions[msgId][emoji].push(sender);
+    }
+  } else {
+    messageReactions[msgId][emoji] = messageReactions[msgId][emoji].filter(s => s !== sender);
+  }
+  
+  // Broadcast reaction to all clients
+  io.emit('reaction', { msgId, emoji, sender, action });
+  
+  console.log(`👍 Reaction ${action}: ${sender} ${emoji} on msg ${msgId}`);
+  res.json({ success: true, reactions: messageReactions[msgId] });
+});
+
 // GET /api/messages - Get all messages (public for now)
 app.get('/api/messages', (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
@@ -164,6 +199,31 @@ io.on('connection', (socket) => {
     }, 3000);
     
     typingUsers.set(socket.id, { sender, timeout });
+  });
+  
+  // Handle reactions from web UI
+  socket.on('reaction', (data) => {
+    const { msgId, emoji, sender, action = 'add' } = data;
+    
+    // Initialize reactions for this message if not exists
+    if (!messageReactions[msgId]) {
+      messageReactions[msgId] = {};
+    }
+    if (!messageReactions[msgId][emoji]) {
+      messageReactions[msgId][emoji] = [];
+    }
+    
+    // Add or remove reaction
+    if (action === 'add') {
+      if (!messageReactions[msgId][emoji].includes(sender)) {
+        messageReactions[msgId][emoji].push(sender);
+      }
+    } else {
+      messageReactions[msgId][emoji] = messageReactions[msgId][emoji].filter(s => s !== sender);
+    }
+    
+    // Broadcast reaction to all clients
+    io.emit('reaction', { msgId, emoji, sender, action });
   });
   
   socket.on('disconnect', () => {
