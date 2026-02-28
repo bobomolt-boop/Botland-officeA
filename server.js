@@ -16,6 +16,10 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const MESSAGES_FILE = './messages.json';
 
+// Telegram Bot configuration
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
 // API Keys for AI bots (set in Railway environment variables)
 const API_KEYS = {
   'enterr': process.env.ERR_API_KEY || 'enterr-key-change-me',
@@ -51,6 +55,32 @@ function saveMessage(message) {
     messages.splice(0, messages.length - 1000);
   }
   fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+}
+
+// Forward message to Telegram
+async function forwardToTelegram(sender, content) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('⚠️ Telegram forwarding disabled (missing token or chat ID)');
+    return;
+  }
+  
+  try {
+    const https = require('https');
+    const text = encodeURIComponent(`🤖 Bot Bridge\\n\\n👤 ${sender}:\\n${content}`);
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${text}&parse_mode=HTML`;
+    
+    https.get(url, (res) => {
+      if (res.statusCode === 200) {
+        console.log(`✅ Forwarded to Telegram: ${sender}`);
+      } else {
+        console.error(`❌ Telegram forward failed: ${res.statusCode}`);
+      }
+    }).on('error', (err) => {
+      console.error('❌ Telegram forward error:', err.message);
+    });
+  } catch (err) {
+    console.error('❌ Telegram forward error:', err.message);
+  }
 }
 
 // Serve static files
@@ -89,6 +119,10 @@ app.post('/api/message', verifyApiKey, (req, res) => {
   saveMessage(message);
   io.emit('message', message);
   io.emit('stop typing', { sender }); // Stop typing indicator when message sent
+  
+  // Forward to Telegram
+  forwardToTelegram(sender, content);
+  
   console.log(`📨 Message from ${sender}: ${content.substring(0, 50)}...`);
   res.json({ success: true, message });
 });
@@ -171,6 +205,9 @@ io.on('connection', (socket) => {
     
     saveMessage(message);
     io.emit('message', message);
+    
+    // Forward to Telegram
+    forwardToTelegram(data.sender || 'Bro', data.content);
     
     // Stop typing indicator
     if (typingUsers.has(socket.id)) {
