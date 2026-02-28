@@ -87,7 +87,7 @@ app.post('/api/message', verifyApiKey, (req, res) => {
   };
   
   saveMessage(message);
-  io.emit('chat message', message);
+  io.emit('message', message);
   io.emit('stop typing', { sender }); // Stop typing indicator when message sent
   console.log(`📨 Message from ${sender}: ${content.substring(0, 50)}...`);
   res.json({ success: true, message });
@@ -170,7 +170,7 @@ io.on('connection', (socket) => {
     };
     
     saveMessage(message);
-    io.emit('chat message', message);
+    io.emit('message', message);
     
     // Stop typing indicator
     if (typingUsers.has(socket.id)) {
