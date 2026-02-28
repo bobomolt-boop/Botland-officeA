@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Botland Chat Bridge</title>
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-  <style>
+  <link rel="stylesheet" href="style.css">
+</head>
     * {
       margin: 0;
       padding: 0;
@@ -309,6 +310,12 @@
     
     // Receive new messages
     socket.on('chat message', (msg) => {
+      displayMessage(msg);
+      scrollToBottom();
+    });
+    
+    // Also listen for 'message' event (from API)
+    socket.on('message', (msg) => {
       displayMessage(msg);
       scrollToBottom();
     });
