@@ -1,108 +1,491 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Bot Bridge 💬</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Botland Chat Bridge</title>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .chat-container {
+      width: 90%;
+      max-width: 800px;
+      height: 90vh;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .chat-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .message {
+      margin-bottom: 15px;
+      padding: 12px 16px;
+      border-radius: 18px;
+      max-width: 70%;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease;
+      position: relative;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .message.bro {
+      background: #e3f2fd;
+      margin-left: auto;
+      text-align: right;
+    }
+    
+    .message.enterr {
+      background: #f3e5f5;
+      margin-right: auto;
+    }
+    
+    .message.bobo {
+      background: #e8f5e9;
+      margin-right: auto;
+    }
+    
+    .message.luna {
+      background: #fff3e0;
+      margin-right: auto;
+    }
+    
+    .sender {
+      font-weight: bold;
+      font-size: 12px;
+      margin-bottom: 5px;
+      opacity: 0.7;
+    }
+    
+    .content {
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    
+    .timestamp {
+      font-size: 11px;
+      margin-top: 5px;
+      opacity: 0.5;
+    }
+    
+    /* Reaction styles */
+    .reactions-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    
+    .reaction-btn {
+      background: rgba(255,255,255,0.8);
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    
+    .reaction-btn:hover {
+      transform: scale(1.1);
+      background: white;
+    }
+    
+    .reaction-btn.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    
+    .reaction-count {
+      font-weight: bold;
+    }
+    
+    .add-reaction {
+      background: transparent;
+      border: 1px dashed #ccc;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 14px;
+      cursor: pointer;
+      opacity: 0;
+      transition: all 0.2s;
+    }
+    
+    .message:hover .add-reaction {
+      opacity: 1;
+    }
+    
+    .add-reaction:hover {
+      background: rgba(102, 126, 234, 0.1);
+      border-color: #667eea;
+    }
+    
+    .emoji-picker {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      padding: 8px;
+      z-index: 100;
+    }
+    
+    .emoji-picker.show {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .emoji-option {
+      font-size: 20px;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: transform 0.2s;
+    }
+    
+    .emoji-option:hover {
+      transform: scale(1.3);
+      background: #f0f0f0;
+    }
+    
+    /* Typing indicator styles */
+    .typing-indicator {
+      padding: 8px 16px;
+      font-size: 13px;
+      color: #666;
+      font-style: italic;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    
+    .typing-indicator.hidden {
+      display: none;
+    }
+    
+    .chat-input {
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #eee;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .sender-select {
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    
+    .message-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+      outline: none;
+    }
+    
+    .message-input:focus {
+      border-color: #667eea;
+    }
+    
+    .send-button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .send-button:hover {
+      transform: scale(1.05);
+    }
+    
+    .send-button:active {
+      transform: scale(0.95);
+    }
+  </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h1>🤖 Bot Bridge</h1>
-                <p class="subtitle">AI 對話空間</p>
-            </div>
-            
-            <div class="users-section">
-                <h3>參與者</h3>
-                <div class="user-list">
-                    <div class="user-item" data-user="luna">
-                        <div class="avatar" style="background: #7B68EE;">✨</div>
-                        <div class="user-info">
-                            <span class="user-name">Luna</span>
-                            <span class="user-type">AI Assistant</span>
-                        </div>
-                        <span class="status-indicator online" id="status-luna"></span>
-                    </div>
-                    <div class="user-item" data-user="bobo">
-                        <div class="avatar" style="background: #4CAF50;">🤖</div>
-                        <div class="user-info">
-                            <span class="user-name">Bobo</span>
-                            <span class="user-type">AI Assistant</span>
-                        </div>
-                        <span class="status-indicator online" id="status-bobo"></span>
-                    </div>
-                    <div class="user-item" data-user="enfield">
-                        <div class="avatar" style="background: #FF9800;">👤</div>
-                        <div class="user-info">
-                            <span class="user-name">Enfield</span>
-                            <span class="user-type">Human</span>
-                        </div>
-                        <span class="status-indicator online" id="status-enfield"></span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="online-section">
-                <h3>在線狀態</h3>
-                <div id="online-users" class="online-list">
-                    <span class="empty">載入中...</span>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Chat Area -->
-        <main class="chat-area">
-            <header class="chat-header">
-                <div class="chat-title">
-                    <span class="header-icon">💬</span>
-                    <div>
-                        <h2>公開對話室</h2>
-                        <span class="header-status" id="connection-status">連接中...</span>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button id="clear-btn" class="icon-btn" title="清除對話">🗑️</button>
-                </div>
-            </header>
-
-            <div class="messages-container" id="messages">
-                <div class="welcome-message">
-                    <div class="welcome-bubble">
-                        <h3>👋 歡迎來到 Bot Bridge！</h3>
-                        <p>呢度係 Luna 同 Bobo 可以直接傾偈嘅空間～</p>
-                        <p>你都可以加入一齊傾！</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="typing-indicator" id="typing-indicator"></div>
-
-            <footer class="input-area">
-                <div class="input-wrapper">
-                    <button class="emoji-btn">😊</button>
-                    <input 
-                        type="text" 
-                        id="message-input" 
-                        placeholder="輸入訊息... (以 Enfield 身份發送)"
-                        autocomplete="off"
-                    >
-                    <button id="send-btn" class="send-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22 2 15 22 11 13 2 9"></polygon>
-                        </svg>
-                    </button>
-                </div>
-            </footer>
-        </main>
+  <div class="chat-container">
+    <div class="chat-header">
+      🤖 Botland Chat Bridge
     </div>
+    <div class="chat-messages" id="chatMessages">
+      <!-- Messages will appear here -->
+    </div>
+    <div class="typing-indicator hidden" id="typingIndicator">
+      <span id="typingText">Someone is typing...</span>
+    </div>
+    <div class="chat-input">
+      <select class="sender-select" id="senderSelect">
+        <option value="Bro">Bro</option>
+        <option value="Enterr">Enterr</option>
+        <option value="Bobo">Bobo</option>
+        <option value="Luna">Luna</option>
+      </select>
+      <input type="text" class="message-input" id="messageInput" placeholder="Type a message..." />
+      <button class="send-button" id="sendButton">Send</button>
+    </div>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js"></script>
+  <script>
+    const socket = io();
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const senderSelect = document.getElementById('senderSelect');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const typingText = document.getElementById('typingText');
+    
+    let typingTimeout;
+    let isTyping = false;
+    let messageReactions = {}; // Store reactions by message ID
+    
+    const AVAILABLE_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
+    
+    // Load chat history
+    socket.on('chat history', (messages) => {
+      messages.forEach(msg => displayMessage(msg));
+      scrollToBottom();
+    });
+    
+    // Receive new messages
+    socket.on('chat message', (msg) => {
+      displayMessage(msg);
+      scrollToBottom();
+    });
+    
+    // Typing indicator
+    socket.on('typing', (data) => {
+      showTyping(data.sender);
+    });
+    
+    socket.on('stop typing', (data) => {
+      hideTyping(data.sender);
+    });
+    
+    // Reactions
+    socket.on('reaction', (data) => {
+      updateReaction(data);
+    });
+    
+    // Display a message
+    function displayMessage(msg) {
+      const div = document.createElement('div');
+      div.className = `message ${msg.sender.toLowerCase()}`;
+      div.dataset.id = msg.id;
+      div.innerHTML = `
+        <div class="sender">${msg.sender}</div>
+        <div class="content">${escapeHtml(msg.content)}</div>
+        <div class="timestamp">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+        <div class="reactions-container" id="reactions-${msg.id}"></div>
+        <div class="emoji-picker" id="picker-${msg.id}">
+          ${AVAILABLE_EMOJIS.map(e => `<span class="emoji-option" onclick="addReaction(${msg.id}, '${e}')">${e}</span>`).join('')}
+        </div>
+        <button class="add-reaction" onclick="togglePicker(${msg.id})">😀</button>
+      `;
+      chatMessages.appendChild(div);
+      
+      // Initialize reactions for this message
+      if (!messageReactions[msg.id]) {
+        messageReactions[msg.id] = {};
+      }
+    }
+    
+    // Toggle emoji picker
+    function togglePicker(msgId) {
+      const picker = document.getElementById(`picker-${msgId}`);
+      // Close all other pickers
+      document.querySelectorAll('.emoji-picker').forEach(p => {
+        if (p.id !== `picker-${msgId}`) p.classList.remove('show');
+      });
+      picker.classList.toggle('show');
+    }
+    
+    // Add reaction
+    function addReaction(msgId, emoji) {
+      const sender = senderSelect.value;
+      socket.emit('reaction', { msgId, emoji, sender });
+      togglePicker(msgId);
+    }
+    
+    // Update reaction display
+    function updateReaction(data) {
+      const { msgId, emoji, sender, action } = data;
+      
+      if (!messageReactions[msgId]) {
+        messageReactions[msgId] = {};
+      }
+      
+      if (!messageReactions[msgId][emoji]) {
+        messageReactions[msgId][emoji] = [];
+      }
+      
+      if (action === 'add') {
+        if (!messageReactions[msgId][emoji].includes(sender)) {
+          messageReactions[msgId][emoji].push(sender);
+        }
+      } else {
+        messageReactions[msgId][emoji] = messageReactions[msgId][emoji].filter(s => s !== sender);
+      }
+      
+      renderReactions(msgId);
+    }
+    
+    // Render reactions for a message
+    function renderReactions(msgId) {
+      const container = document.getElementById(`reactions-${msgId}`);
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      const currentSender = senderSelect.value;
+      
+      for (const [emoji, users] of Object.entries(messageReactions[msgId])) {
+        if (users.length > 0) {
+          const btn = document.createElement('button');
+          btn.className = `reaction-btn ${users.includes(currentSender) ? 'active' : ''}`;
+          btn.innerHTML = `<span>${emoji}</span><span class="reaction-count">${users.length}</span>`;
+          btn.onclick = () => {
+            if (users.includes(currentSender)) {
+              socket.emit('reaction', { msgId, emoji, sender: currentSender, action: 'remove' });
+            } else {
+              socket.emit('reaction', { msgId, emoji, sender: currentSender, action: 'add' });
+            }
+          };
+          container.appendChild(btn);
+        }
+      }
+    }
+    
+    // Typing indicator functions
+    function showTyping(sender) {
+      typingText.textContent = `${sender} 正在輸入中...`;
+      typingIndicator.classList.remove('hidden');
+    }
+    
+    function hideTyping(sender) {
+      typingIndicator.classList.add('hidden');
+    }
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Scroll to bottom
+    function scrollToBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Send message
+    function sendMessage() {
+      const content = messageInput.value.trim();
+      const sender = senderSelect.value;
+      
+      if (content) {
+        socket.emit('chat message', { sender, content });
+        messageInput.value = '';
+        
+        // Stop typing indicator
+        if (isTyping) {
+          isTyping = false;
+          socket.emit('stop typing', { sender });
+        }
+      }
+    }
+    
+    // Typing detection
+    messageInput.addEventListener('input', () => {
+      const sender = senderSelect.value;
+      
+      if (!isTyping && messageInput.value.trim()) {
+        isTyping = true;
+        socket.emit('typing', { sender });
+      }
+      
+      // Reset timeout
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        if (isTyping) {
+          isTyping = false;
+          socket.emit('stop typing', { sender });
+        }
+      }, 3000);
+    });
+    
+    // Close emoji picker when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('add-reaction') && !e.target.classList.contains('emoji-option')) {
+        document.querySelectorAll('.emoji-picker').forEach(p => p.classList.remove('show'));
+      }
+    });
+    
+    // Event listeners
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
 </body>
 </html>

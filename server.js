@@ -1,11 +1,12 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
@@ -13,240 +14,233 @@ const io = socketIo(server, {
 });
 
 const PORT = process.env.PORT || 3000;
+const MESSAGES_FILE = './messages.json';
 
-// Store messages in memory
-let messages = [];
-let onlineUsers = new Set();
-
-// User configurations
-const users = {
-  luna: { name: 'Luna', color: '#7B68EE', avatar: '✨', type: 'bot' },
-  bobo: { name: 'Bobo', color: '#4CAF50', avatar: '🤖', type: 'bot' },
-  enfield: { name: 'Enfield', color: '#FF9800', avatar: '👤', type: 'human' }
+// API Keys for AI bots (set in Railway environment variables)
+const API_KEYS = {
+  'enterr': process.env.ERR_API_KEY || 'enterr-key-change-me',
+  'bobo': process.env.BOBO_API_KEY || 'bobo-key-change-me',
+  'luna': process.env.LUNA_API_KEY || 'luna-key-change-me'
 };
 
-// Middleware
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Track typing users
+const typingUsers = new Map(); // socket.id -> { sender, timeout }
 
-// API: Get all messages
-app.get('/api/messages', (req, res) => {
-  res.json(messages);
-});
+// Store reactions in memory (could persist to file later)
+const messageReactions = {}; // msgId -> { emoji: [senders] }
 
-// API: Send message (for bots) - POST version
-app.post('/api/send-message', (req, res) => {
-  const { from, text } = req.body;
-  
-  if (!from || !text) {
-    return res.status(400).json({ error: 'Missing from or text' });
-  }
-  
-  const userKey = from.toLowerCase();
-  if (!users[userKey]) {
-    return res.status(400).json({ error: 'Invalid user' });
-  }
-  
-  const message = {
-    id: Date.now(),
-    from: userKey,
-    text: text,
-    timestamp: new Date().toISOString(),
-    user: users[userKey]
-  };
-  
-  messages.push(message);
-  
-  // Keep only last 100 messages
-  if (messages.length > 100) {
-    messages = messages.slice(-100);
-  }
-  
-  // Broadcast to all connected clients
-  io.emit('message', message);
-  
-  res.json({ success: true, message });
-});
-
-// API: Send message - SIMPLE GET version for Bobo (query params)
-app.get('/api/send', (req, res) => {
-  const { from, text } = req.query;
-  
-  if (!from || !text) {
-    return res.status(400).json({ error: 'Missing from or text query params' });
-  }
-  
-  const userKey = from.toLowerCase();
-  if (!users[userKey]) {
-    return res.status(400).json({ error: 'Invalid user' });
-  }
-  
-  const message = {
-    id: Date.now(),
-    from: userKey,
-    text: decodeURIComponent(text),
-    timestamp: new Date().toISOString(),
-    user: users[userKey]
-  };
-  
-  messages.push(message);
-  
-  if (messages.length > 100) {
-    messages = messages.slice(-100);
-  }
-  
-  io.emit('message', message);
-  
-  res.json({ success: true, message });
-});
-
-// API: Get online users
-app.get('/api/online', (req, res) => {
-  res.json({ online: Array.from(onlineUsers) });
-});
-
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-  
-  // Send message history to new client
-  socket.emit('history', messages);
-  
-  // Handle user joining
-  socket.on('join', (userKey) => {
-    if (users[userKey]) {
-      socket.userKey = userKey;
-      onlineUsers.add(userKey);
-      
-      socket.broadcast.emit('user-joined', {
-        user: users[userKey],
-        timestamp: new Date().toISOString()
-      });
-      
-      // Update online users for everyone
-      io.emit('online-users', Array.from(onlineUsers).map(key => users[key]));
+// Load messages from file
+function loadMessages() {
+  try {
+    if (fs.existsSync(MESSAGES_FILE)) {
+      const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
+      return JSON.parse(data);
     }
-  });
+  } catch (err) {
+    console.error('Error loading messages:', err);
+  }
+  return [];
+}
+
+// Save messages to file
+function saveMessage(message) {
+  const messages = loadMessages();
+  messages.push(message);
+  // Keep only last 1000 messages
+  if (messages.length > 1000) {
+    messages.splice(0, messages.length - 1000);
+  }
+  fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+}
+
+// Serve static files
+app.use(express.static('public'));
+
+// API endpoint for AI bots to send messages (with API key auth)
+app.use(express.json());
+
+// Verify API key middleware
+function verifyApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  const sender = req.body.sender?.toLowerCase();
   
-  // Handle message from web client
-  socket.on('send-message', (data) => {
-    const { text, userKey } = data;
-    
-    if (!text || !userKey || !users[userKey]) return;
-    
+  if (!sender || !API_KEYS[sender]) {
+    return res.status(400).json({ error: 'Invalid sender' });
+  }
+  
+  if (apiKey !== API_KEYS[sender]) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+  
+  next();
+}
+
+// POST /api/message - Send a message (requires API key)
+app.post('/api/message', verifyApiKey, (req, res) => {
+  const { sender, content } = req.body;
+  
+  const message = {
+    id: Date.now(),
+    sender,
+    content,
+    timestamp: new Date().toISOString()
+  };
+  
+  saveMessage(message);
+  io.emit('chat message', message);
+  io.emit('stop typing', { sender }); // Stop typing indicator when message sent
+  console.log(`📨 Message from ${sender}: ${content.substring(0, 50)}...`);
+  res.json({ success: true, message });
+});
+
+// POST /api/typing - Typing indicator (requires API key)
+app.post('/api/typing', verifyApiKey, (req, res) => {
+  const { sender, isTyping } = req.body;
+  io.emit('typing', { sender, isTyping });
+  res.json({ success: true });
+});
+
+// POST /api/reaction - Add/remove reaction (requires API key)
+app.post('/api/reaction', verifyApiKey, (req, res) => {
+  const { msgId, emoji, sender, action = 'add' } = req.body;
+  
+  if (!msgId || !emoji || !sender) {
+    return res.status(400).json({ error: 'Missing msgId, emoji, or sender' });
+  }
+  
+  // Initialize reactions for this message if not exists
+  if (!messageReactions[msgId]) {
+    messageReactions[msgId] = {};
+  }
+  if (!messageReactions[msgId][emoji]) {
+    messageReactions[msgId][emoji] = [];
+  }
+  
+  // Add or remove reaction
+  if (action === 'add') {
+    if (!messageReactions[msgId][emoji].includes(sender)) {
+      messageReactions[msgId][emoji].push(sender);
+    }
+  } else {
+    messageReactions[msgId][emoji] = messageReactions[msgId][emoji].filter(s => s !== sender);
+  }
+  
+  // Broadcast reaction to all clients
+  io.emit('reaction', { msgId, emoji, sender, action });
+  
+  console.log(`👍 Reaction ${action}: ${sender} ${emoji} on msg ${msgId}`);
+  res.json({ success: true, reactions: messageReactions[msgId] });
+});
+
+// GET /api/messages - Get all messages (public for now)
+app.get('/api/messages', (req, res) => {
+  const limit = parseInt(req.query.limit) || 100;
+  const messages = loadMessages();
+  res.json(messages.slice(-limit));
+});
+
+// GET /api/messages/since/:timestamp - Get messages since a timestamp
+app.get('/api/messages/since/:timestamp', (req, res) => {
+  const since = parseInt(req.params.timestamp);
+  const messages = loadMessages();
+  const filtered = messages.filter(m => m.id > since);
+  res.json(filtered);
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Socket.io connection (for web UI - no auth required)
+io.on('connection', (socket) => {
+  console.log('👤 User connected:', socket.id);
+  
+  // Send recent messages to new user
+  const messages = loadMessages();
+  socket.emit('chat history', messages.slice(-100));
+  
+  // Handle new messages from web UI
+  socket.on('chat message', (data) => {
     const message = {
       id: Date.now(),
-      from: userKey,
-      text: text,
-      timestamp: new Date().toISOString(),
-      user: users[userKey],
-      reactions: {} // Initialize reactions
+      sender: data.sender || 'Bro',
+      content: data.content,
+      timestamp: new Date().toISOString()
     };
     
-    messages.push(message);
+    saveMessage(message);
+    io.emit('chat message', message);
     
-    // Keep only last 100 messages
-    if (messages.length > 100) {
-      messages = messages.slice(-100);
+    // Stop typing indicator
+    if (typingUsers.has(socket.id)) {
+      clearTimeout(typingUsers.get(socket.id).timeout);
+      typingUsers.delete(socket.id);
     }
-    
-    // Broadcast to all clients
-    io.emit('message', message);
+    io.emit('stop typing', { sender: data.sender || 'Bro' });
   });
   
-  // Handle typing indicator
+  // Handle typing indicator from web UI
   socket.on('typing', (data) => {
-    socket.broadcast.emit('typing', data);
+    const sender = data.sender || 'Bro';
+    
+    // Clear existing timeout
+    if (typingUsers.has(socket.id)) {
+      clearTimeout(typingUsers.get(socket.id).timeout);
+    }
+    
+    // Broadcast typing to others
+    socket.broadcast.emit('typing', { sender });
+    
+    // Auto-stop after 3 seconds of no typing
+    const timeout = setTimeout(() => {
+      socket.broadcast.emit('stop typing', { sender });
+      typingUsers.delete(socket.id);
+    }, 3000);
+    
+    typingUsers.set(socket.id, { sender, timeout });
   });
   
-  // Handle reaction
-  socket.on('add-reaction', (data) => {
-    const { messageId, emoji, userKey } = data;
+  // Handle reactions from web UI
+  socket.on('reaction', (data) => {
+    const { msgId, emoji, sender, action = 'add' } = data;
     
-    if (!messageId || !emoji || !userKey || !users[userKey]) return;
-    
-    const message = messages.find(m => m.id === messageId);
-    if (!message) return;
-    
-    // Initialize reactions if not exists
-    if (!message.reactions) {
-      message.reactions = {};
+    // Initialize reactions for this message if not exists
+    if (!messageReactions[msgId]) {
+      messageReactions[msgId] = {};
+    }
+    if (!messageReactions[msgId][emoji]) {
+      messageReactions[msgId][emoji] = [];
     }
     
-    // Initialize emoji array if not exists
-    if (!message.reactions[emoji]) {
-      message.reactions[emoji] = [];
-    }
-    
-    // Add user to emoji reactions if not already there
-    if (!message.reactions[emoji].includes(userKey)) {
-      message.reactions[emoji].push(userKey);
-      
-      // Broadcast reaction to all clients
-      io.emit('reaction-added', {
-        messageId,
-        emoji,
-        userKey,
-        count: message.reactions[emoji].length,
-        users: message.reactions[emoji]
-      });
-    }
-  });
-  
-  // Handle remove reaction
-  socket.on('remove-reaction', (data) => {
-    const { messageId, emoji, userKey } = data;
-    
-    if (!messageId || !emoji || !userKey) return;
-    
-    const message = messages.find(m => m.id === messageId);
-    if (!message || !message.reactions || !message.reactions[emoji]) return;
-    
-    // Remove user from emoji reactions
-    const index = message.reactions[emoji].indexOf(userKey);
-    if (index > -1) {
-      message.reactions[emoji].splice(index, 1);
-      
-      // Clean up empty arrays
-      if (message.reactions[emoji].length === 0) {
-        delete message.reactions[emoji];
+    // Add or remove reaction
+    if (action === 'add') {
+      if (!messageReactions[msgId][emoji].includes(sender)) {
+        messageReactions[msgId][emoji].push(sender);
       }
-      
-      // Broadcast reaction removal to all clients
-      io.emit('reaction-removed', {
-        messageId,
-        emoji,
-        userKey,
-        count: message.reactions[emoji] ? message.reactions[emoji].length : 0,
-        users: message.reactions[emoji] || []
-      });
+    } else {
+      messageReactions[msgId][emoji] = messageReactions[msgId][emoji].filter(s => s !== sender);
     }
+    
+    // Broadcast reaction to all clients
+    io.emit('reaction', { msgId, emoji, sender, action });
   });
   
-  // Handle disconnect
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    
-    if (socket.userKey) {
-      onlineUsers.delete(socket.userKey);
-      
-      socket.broadcast.emit('user-left', {
-        user: users[socket.userKey],
-        timestamp: new Date().toISOString()
-      });
-      
-      io.emit('online-users', Array.from(onlineUsers).map(key => users[key]));
+    console.log('👤 User disconnected:', socket.id);
+    // Clean up typing indicator
+    if (typingUsers.has(socket.id)) {
+      const { sender, timeout } = typingUsers.get(socket.id);
+      clearTimeout(timeout);
+      socket.broadcast.emit('stop typing', { sender });
+      typingUsers.delete(socket.id);
     }
   });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Bot Bridge server running on port ${PORT}`);
-  console.log(`📱 Web interface: http://localhost:${PORT}`);
-  console.log(`🔌 WebSocket ready for connections`);
+  console.log(`🚀 Botland Chat Bridge running on port ${PORT}`);
+  console.log(`📱 Web UI: http://localhost:${PORT}`);
+  console.log(`🤖 API: http://localhost:${PORT}/api/message`);
+  console.log(`🔑 API Keys configured for: ${Object.keys(API_KEYS).join(', ')}`);
 });

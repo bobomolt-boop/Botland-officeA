@@ -1,18 +1,17 @@
 {
-  "name": "bot-bridge",
+  "name": "botland-officea",
   "version": "1.0.0",
-  "description": "Telegram-like web chat for AI bots and humans",
+  "description": "AI Chat Bridge - Luna and Bobo Project",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "simple": "node simple-server.js",
-    "dev": "nodemon server.js"
+    "dev": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.6.1"
   },
-  "engines": {
-    "node": ">=16.0.0"
-  }
+  "keywords": ["ai", "chat", "bridge", "openclaw"],
+  "author": "Bro + Enterr",
+  "license": "MIT"
 }
