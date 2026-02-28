@@ -93,11 +93,29 @@ function displayMessage(message) {
     
     const messageEl = document.createElement('div');
     messageEl.className = `message ${message.from} ${isOwn ? 'own' : ''}`;
+    messageEl.dataset.id = message.id;
     
     const time = new Date(message.timestamp).toLocaleTimeString('zh-HK', {
         hour: '2-digit',
         minute: '2-digit'
     });
+    
+    // Build reactions HTML
+    let reactionsHtml = '';
+    if (message.reactions && Object.keys(message.reactions).length > 0) {
+        reactionsHtml = '<div class="reactions-bar">';
+        for (const [emoji, userKeys] of Object.entries(message.reactions)) {
+            const isActive = userKeys.includes(currentUser);
+            reactionsHtml += `
+                <button class="reaction-btn ${isActive ? 'active' : ''}" 
+                        data-emoji="${emoji}" 
+                        onclick="toggleReaction(${message.id}, '${emoji}')">
+                    ${emoji} ${userKeys.length}
+                </button>
+            `;
+        }
+        reactionsHtml += '</div>';
+    }
     
     messageEl.innerHTML = `
         <div class="message-avatar" style="background: ${user.color}20; color: ${user.color};">
@@ -109,6 +127,10 @@ function displayMessage(message) {
                 <span class="message-time">${time}</span>
             </div>
             <div class="message-bubble">${escapeHtml(message.text)}</div>
+            ${reactionsHtml}
+            <div class="reaction-picker">
+                <button class="add-reaction-btn" onclick="showReactionPicker(${message.id}, this)">+ 😊</button>
+            </div>
         </div>
     `;
     
@@ -240,3 +262,109 @@ messageInput.focus();
 
 console.log('🤖 Bot Bridge client loaded!');
 console.log('Connected as:', currentUser);
+
+// Reaction functions
+const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '🎉', '🔥', '👏', '💯', '🤔', '👀'];
+
+function showReactionPicker(messageId, btn) {
+    // Remove existing pickers
+    document.querySelectorAll('.emoji-picker-popup').forEach(el => el.remove());
+    
+    const picker = document.createElement('div');
+    picker.className = 'emoji-picker-popup';
+    picker.innerHTML = EMOJI_LIST.map(emoji => 
+        `<span class="emoji-option" onclick="addReaction(${messageId}, '${emoji}')">${emoji}</span>`
+    ).join('');
+    
+    btn.parentElement.appendChild(picker);
+    
+    // Close picker when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function closePicker(e) {
+            if (!picker.contains(e.target) && e.target !== btn) {
+                picker.remove();
+                document.removeEventListener('click', closePicker);
+            }
+        });
+    }, 100);
+}
+
+function addReaction(messageId, emoji) {
+    socket.emit('add-reaction', {
+        messageId,
+        emoji,
+        userKey: currentUser
+    });
+    
+    // Remove picker
+    document.querySelectorAll('.emoji-picker-popup').forEach(el => el.remove());
+}
+
+function toggleReaction(messageId, emoji) {
+    const message = document.querySelector(`.message[data-id="${messageId}"]`);
+    const reactionBtn = message?.querySelector(`button[data-emoji="${emoji}"]`);
+    const isActive = reactionBtn?.classList.contains('active');
+    
+    if (isActive) {
+        socket.emit('remove-reaction', {
+            messageId,
+            emoji,
+            userKey: currentUser
+        });
+    } else {
+        socket.emit('add-reaction', {
+            messageId,
+            emoji,
+            userKey: currentUser
+        });
+    }
+}
+
+// Listen for reaction events
+socket.on('reaction-added', (data) => {
+    updateReactionDisplay(data.messageId, data.emoji, data.users);
+});
+
+socket.on('reaction-removed', (data) => {
+    updateReactionDisplay(data.messageId, data.emoji, data.users);
+});
+
+function updateReactionDisplay(messageId, emoji, users) {
+    const messageEl = document.querySelector(`.message[data-id="${messageId}"]`);
+    if (!messageEl) return;
+    
+    let reactionsBar = messageEl.querySelector('.reactions-bar');
+    
+    if (users.length === 0) {
+        // Remove emoji button if no users
+        const btn = reactionsBar?.querySelector(`button[data-emoji="${emoji}"]`);
+        if (btn) btn.remove();
+        if (reactionsBar && reactionsBar.children.length === 0) {
+            reactionsBar.remove();
+        }
+        return;
+    }
+    
+    // Create reactions bar if not exists
+    if (!reactionsBar) {
+        reactionsBar = document.createElement('div');
+        reactionsBar.className = 'reactions-bar';
+        messageEl.querySelector('.message-bubble').after(reactionsBar);
+    }
+    
+    // Update or create emoji button
+    let btn = reactionsBar.querySelector(`button[data-emoji="${emoji}"]`);
+    const isActive = users.includes(currentUser);
+    
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.className = `reaction-btn ${isActive ? 'active' : ''}`;
+        btn.dataset.emoji = emoji;
+        btn.onclick = () => toggleReaction(messageId, emoji);
+        reactionsBar.appendChild(btn);
+    } else {
+        btn.className = `reaction-btn ${isActive ? 'active' : ''}`;
+    }
+    
+    btn.textContent = `${emoji} ${users.length}`;
+}

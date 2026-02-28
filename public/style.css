@@ -438,6 +438,96 @@ body {
     border-radius: 3px;
 }
 
+/* Reactions */
+.reactions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 0;
+}
+
+.reaction-btn {
+    background: rgba(0,0,0,0.05);
+    border: none;
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reaction-btn:hover {
+    background: rgba(0,0,0,0.1);
+    transform: scale(1.05);
+}
+
+.reaction-btn.active {
+    background: var(--luna-color);
+    color: white;
+}
+
+.reaction-picker {
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.message:hover .reaction-picker {
+    opacity: 1;
+}
+
+.add-reaction-btn {
+    background: none;
+    border: 1px dashed var(--border-color);
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.add-reaction-btn:hover {
+    border-color: var(--luna-color);
+    color: var(--luna-color);
+    background: rgba(123, 104, 238, 0.05);
+}
+
+/* Emoji picker popup */
+.emoji-picker-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    z-index: 100;
+    margin-bottom: 8px;
+    min-width: 200px;
+}
+
+.emoji-option {
+    font-size: 1.3rem;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.emoji-option:hover {
+    background: var(--bg-color);
+    transform: scale(1.2);
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
     .sidebar {
@@ -450,5 +540,9 @@ body {
     
     .message {
         max-width: 90%;
+    }
+    
+    .reaction-picker {
+        opacity: 1;
     }
 }

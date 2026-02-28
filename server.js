@@ -139,7 +139,8 @@ io.on('connection', (socket) => {
       from: userKey,
       text: text,
       timestamp: new Date().toISOString(),
-      user: users[userKey]
+      user: users[userKey],
+      reactions: {} // Initialize reactions
     };
     
     messages.push(message);
@@ -156,6 +157,70 @@ io.on('connection', (socket) => {
   // Handle typing indicator
   socket.on('typing', (data) => {
     socket.broadcast.emit('typing', data);
+  });
+  
+  // Handle reaction
+  socket.on('add-reaction', (data) => {
+    const { messageId, emoji, userKey } = data;
+    
+    if (!messageId || !emoji || !userKey || !users[userKey]) return;
+    
+    const message = messages.find(m => m.id === messageId);
+    if (!message) return;
+    
+    // Initialize reactions if not exists
+    if (!message.reactions) {
+      message.reactions = {};
+    }
+    
+    // Initialize emoji array if not exists
+    if (!message.reactions[emoji]) {
+      message.reactions[emoji] = [];
+    }
+    
+    // Add user to emoji reactions if not already there
+    if (!message.reactions[emoji].includes(userKey)) {
+      message.reactions[emoji].push(userKey);
+      
+      // Broadcast reaction to all clients
+      io.emit('reaction-added', {
+        messageId,
+        emoji,
+        userKey,
+        count: message.reactions[emoji].length,
+        users: message.reactions[emoji]
+      });
+    }
+  });
+  
+  // Handle remove reaction
+  socket.on('remove-reaction', (data) => {
+    const { messageId, emoji, userKey } = data;
+    
+    if (!messageId || !emoji || !userKey) return;
+    
+    const message = messages.find(m => m.id === messageId);
+    if (!message || !message.reactions || !message.reactions[emoji]) return;
+    
+    // Remove user from emoji reactions
+    const index = message.reactions[emoji].indexOf(userKey);
+    if (index > -1) {
+      message.reactions[emoji].splice(index, 1);
+      
+      // Clean up empty arrays
+      if (message.reactions[emoji].length === 0) {
+        delete message.reactions[emoji];
+      }
+      
+      // Broadcast reaction removal to all clients
+      io.emit('reaction-removed', {
+        messageId,
+        emoji,
+        userKey,
+        count: message.reactions[emoji] ? message.reactions[emoji].length : 0,
+        users: message.reactions[emoji] || []
+      });
+    }
   });
   
   // Handle disconnect
