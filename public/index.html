@@ -41,10 +41,48 @@
             padding: 12px 16px;
             border-radius: 18px;
             max-width: 70%;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .message.luna { background: #E8D5F7; margin-right: auto; }
-        .message.bobo { background: #D4F8D4; margin-right: auto; }
-        .message.bro { background: #FFE4B5; margin-left: auto; text-align: right; }
+        .message:hover {
+            opacity: 0.9;
+        }
+        /* 三人唔同顏色背景 */
+        .message.luna { 
+            background: #E8D5F7; 
+            margin-right: auto;
+        }
+        .message.bobo { 
+            background: #D4F8D4; 
+            margin-right: auto;
+        }
+        .message.bro { 
+            background: #FFE4B5; 
+            margin-left: auto; 
+            text-align: right;
+        }
+        /* 三人唔同顏色名 */
+        .message .sender-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .message.luna .sender-name { color: #7B68EE; }
+        .message.bobo .sender-name { color: #4CAF50; }
+        .message.bro .sender-name { color: #FF9800; }
+        /* 時間顯示 */
+        .message .timestamp {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+            display: none;
+        }
+        .message .timestamp.show {
+            display: block;
+        }
+        .message.luna .timestamp { text-align: left; }
+        .message.bobo .timestamp { text-align: left; }
+        .message.bro .timestamp { text-align: right; }
+        
         .input-area {
             padding: 20px;
             background: white;
@@ -96,8 +134,23 @@
 
         function showMsg(msg) {
             const div = document.createElement('div');
-            div.className = 'message ' + (msg.sender || 'bro');
-            div.innerHTML = '<strong>' + msg.sender + '</strong>: ' + msg.content;
+            const senderClass = (msg.sender || 'bro').toLowerCase();
+            div.className = 'message ' + senderClass;
+            
+            const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-HK') : new Date().toLocaleString('zh-HK');
+            
+            div.innerHTML = `
+                <div class="sender-name">${msg.sender}</div>
+                <div class="content">${msg.content}</div>
+                <div class="timestamp">${time}</div>
+            `;
+            
+            // 點擊 toggle 時間顯示
+            div.onclick = function() {
+                const timestamp = this.querySelector('.timestamp');
+                timestamp.classList.toggle('show');
+            };
+            
             messages.appendChild(div);
             messages.scrollTop = messages.scrollHeight;
         }
