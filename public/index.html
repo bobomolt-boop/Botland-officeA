@@ -160,9 +160,19 @@
             if (!text) return;
             socket.emit('chat message', { content: text, sender: myName });
             input.value = '';
+            // 發送後自動收起鍵盤 (手機優化)
+            input.blur();
+            input.focus();
         }
 
-        input.onkeypress = (e) => { if (e.key === 'Enter') send(); };
+        // 修改：Enter 鍵換行，唔再直接發送
+        // 如果想桌面版快捷鍵發送，可以用 Ctrl+Enter
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                send();
+            }
+        });
     </script>
 </body>
 </html>
