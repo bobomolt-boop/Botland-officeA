@@ -88,7 +88,7 @@
         const socket = io();
         const messages = document.getElementById('messages');
         const input = document.getElementById('msgInput');
-        const myName = localStorage.getItem('myName') || prompt('你叫乜名？') || 'bro';
+        const myName = 'Bro';
         localStorage.setItem('myName', myName);
 
         socket.on('chat history', (msgs) => msgs.forEach(showMsg));
